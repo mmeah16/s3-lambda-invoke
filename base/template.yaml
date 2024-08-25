@@ -1,0 +1,172 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: "AWS::Serverless-2016-10-31"
+
+Resources:
+  S3Bucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-bucket"
+
+  LambdaExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: "lambda.amazonaws.com"
+            Action: "sts:AssumeRole"
+
+  LambdaExecutionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: "S3AccessPolicy"
+      Roles:
+        - !Ref LambdaExecutionRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "s3:GetObject"
+              - "s3:PutObject"
+              - "s3:ListBucket"
+            Resource:
+              - !Sub "arn:aws:s3:::${S3Bucket}"
+              - !Sub "arn:aws:s3:::${S3Bucket}/*"
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogGroup"
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+            Resource: "arn:aws:logs:*:*:*"
+
+  MyLambdaFunction:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-MyLambdaFunction"
+      Handler: "lambda_handler.lambda_handler"
+      Runtime: "python3.12"
+      CodeUri: "./s3-handler"
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Layers:
+        - arn:aws:lambda:us-east-1:297552353691:layer:s3-lambda-layer:1
+      Events:
+        S3UploadEvent:
+          Type: S3
+          Properties:
+            Bucket: !Ref S3Bucket
+            Events:
+              - "s3:ObjectCreated:*"
+
+  FastApiLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: fastapi-lambda
+      Handler: main.handler # The function in your code to be executed
+      Runtime: python3.12
+      CodeUri: ./app # Path to the directory containing your function code
+      MemorySize: 128 # Memory allocation in MB
+      Timeout: 10 # Timeout in seconds
+      Layers:
+        - arn:aws:lambda:us-east-1:297552353691:layer:s3-lambda-layer:1
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /
+            Method: get
+
+Outputs:
+  S3BucketName:
+    Value: !Ref S3Bucket
+  LambdaFunctionName:
+    Value: !GetAtt MyLambdaFunction.Arn
+# AWSTemplateFormatVersion: "2010-09-09"
+# Transform: AWS::Serverless-2016-10-31
+# Description: SAM template with a Lambda function
+
+# Resources:
+#   FastApiLambdaFunction:
+#     Type: AWS::Serverless::Function
+#     Properties:
+#       FunctionName: fastapi-lambda
+#       Handler: main.handler # The function in your code to be executed
+#       Runtime: python3.12
+#       CodeUri: ./app # Path to the directory containing your function code
+#       MemorySize: 128 # Memory allocation in MB
+#       Timeout: 10 # Timeout in seconds
+#       Layers:
+#         - arn:aws:lambda:us-east-1:297552353691:layer:s3-lambda-layer:1
+#       Events:
+#         ApiEvent:
+#           Type: Api
+#           Properties:
+#             Path: /
+#             Method: get
+
+#   S3Bucket:
+#     Type: "AWS::S3::Bucket"
+#     Properties:
+#       BucketName: !Sub "${AWS::StackName}-bucket"
+
+#   S3LambdaFunction:
+#     Type: AWS::Serverless::Function
+#     Properties:
+#       FunctionName: s3-lambda-invoke
+#       Handler: lambda_handler.lambda_handler # The function in your code to be executed
+#       Role: !GetAtt IAMRole.Arn
+#       Runtime: python3.12
+#       CodeUri: ./s3-handler # Path to the directory containing your function code
+#       MemorySize: 128 # Memory allocation in MB
+#       Timeout: 10 # Timeout in seconds
+#       Events:
+#         S3UploadEvent:
+#           Type: S3
+#           Properties:
+#             Bucket: !Ref S3Bucket # Reference the bucket within the same template
+#             Events: s3:ObjectCreated:*
+#       Layers:
+#         - arn:aws:lambda:us-east-1:297552353691:layer:s3-lambda-layer:1
+
+#   IAMRole:
+#     Type: AWS::IAM::Role
+#     Properties:
+#       AssumeRolePolicyDocument:
+#         Version: 2012-10-17
+#         Statement:
+#           - Effect: Allow
+#             Principal:
+#               Service: lambda.amazonaws.com
+#             Action: sts:AssumeRole
+#       Policies:
+#         - PolicyName: LambdaS3Policy
+#           PolicyDocument:
+#             Version: 2012-10-17
+#             Statement:
+#               - Effect: Allow
+#                 Action:
+#                   - logs:CreateLogGroup
+#                   - logs:CreateLogStream
+#                   - logs:PutLogEvents
+#                 Resource: "*"
+#               - Effect: Allow
+#                 Action:
+#                   - s3:GetObject
+#                   - s3:ListBucket
+#                 Resource: !Sub arn:aws:s3:::${S3Bucket}
+
+#   LambdaInvokePermission:
+#     Type: AWS::Lambda::Permission
+#     Properties:
+#       Action: lambda:InvokeFunction
+#       FunctionName: !Ref S3LambdaFunction
+#       Principal: s3.amazonaws.com
+#       SourceArn: !GetAtt S3Bucket.Arn
+
+# Outputs:
+#   MyLambdaFunctionOutput:
+#     Description: "Lambda Function ARN"
+#     Value: !GetAtt FastApiLambdaFunction.Arn
+
